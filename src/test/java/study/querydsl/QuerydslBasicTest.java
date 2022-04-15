@@ -15,6 +15,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.annotation.Commit;
 import study.querydsl.dto.MemberDto;
 import study.querydsl.dto.QMemberDto;
 import study.querydsl.dto.UserDto;
@@ -564,7 +565,7 @@ public class QuerydslBasicTest {
     // 계층적 문제,, 너무 의존적이다.
 
     @Test
-    public void findDtoByQueryProjection(){
+    public void findDtoByQueryProjection() {
         List<MemberDto> result = queryFactory
                 .select(new QMemberDto(member.username, member.age))
                 .from(member)
@@ -575,7 +576,7 @@ public class QuerydslBasicTest {
     }
 
     @Test
-    public void dynamicQuery_BooleanBulider(){
+    public void dynamicQuery_BooleanBulider() {
         String usernameParam = "member1";
         Integer ageParam = 10;
 
@@ -583,6 +584,7 @@ public class QuerydslBasicTest {
         Assertions.assertThat(result.size()).isEqualTo(1);
 
     }
+
     private List<Member> searchMember1(String usernameCond, Integer ageCond) {
         BooleanBuilder builder = new BooleanBuilder();
         if (usernameCond != null) {
@@ -613,13 +615,83 @@ public class QuerydslBasicTest {
                 .fetch();
     }
 
-    //생성 매소드 null일 상태 처리해주어야한다.
+    //생성 매소드 null일 상태 처리해주어야한다. null이면 무시함.
+    //조립 가능함
 
     private BooleanExpression usernameEq(String usernameCond) {
         return usernameCond != null ? member.username.eq(usernameCond) : null;
     }
+
     private BooleanExpression ageEq(Integer ageCond) {
         return ageCond != null ? member.age.eq(ageCond) : null;
     }
-}
 
+    //조합가능!! 재사용가능!!
+    private BooleanExpression allEq(String usernameCond, Integer ageCond) {
+        return usernameEq(usernameCond).and(ageEq(ageCond));
+    }
+
+    @Test
+    //조심해야함 영속성 컨텍스트에 있는 엔티티를 무시하고 실행
+    //영컨 항상 유지 . 우선순위 높다.
+    public void bulkUpdate() {
+
+
+        long count = queryFactory
+                .update(member)
+                .set(member.username, "비회원")
+                .where(member.age.lt(28))
+                .execute();
+
+        em.flush();
+        em.clear(); //영컨 날림림
+    }
+
+    //더하기 벌크 곱하기는 multiply
+    @Test
+    public void bulkAdd() {
+        long count = queryFactory
+                .update(member)
+                .set(member.age, member.age.add(1))
+                .execute();
+    }
+
+    //삭제
+    @Test
+    public void bulkDelete() {
+        long count = queryFactory
+                .delete(member)
+                .where(member.age.gt(18))
+                .execute();
+    }
+
+    @Test
+    public void sqlFunction() {
+        List<String> result = queryFactory
+                .select(Expressions.stringTemplate(
+                        "function('replace', {0}, {1}, {2})",
+                        member.username, "member", "M"))
+                .from(member)
+                .fetch();
+        for (String s : result) {
+            System.out.println("s=" + s);
+        }
+    }
+
+    //소문자 바꾸기
+
+    @Test
+    public void sqlFunction2() {
+        List<String> result = queryFactory
+                .select(member.username)
+                .from(member)
+                //  .where(member.username.eq(Expressions.stringTemplate("function('lower', {0})",
+                //        member.username)))
+                .where(member.username.eq(member.username.lower()))
+                .fetch();
+        for (String s : result) {
+            System.out.println("s=" + s);
+        }
+
+    }
+}
